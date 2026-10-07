@@ -14,12 +14,22 @@ import { fetchStats } from '../api/client'
 
 export type StreamState = 'connecting' | 'live' | 'polling' | 'offline'
 
+export type ReadModelName = 'stats' | 'orders'
+
+export interface StatsSignal {
+  revision: number
+  model: ReadModelName
+}
+
 export interface UseStatsResult {
   stats: DashboardStats | null
   empty: boolean
   loading: boolean
   error: string | null
   streamState: StreamState
+  /** Última señal del stream. Sirve para que otros hooks reaccionen al read
+   *  model que cambió (p.ej. recargar la lista de órdenes). */
+  lastSignal: StatsSignal | null
   refresh: () => void
 }
 
@@ -35,6 +45,7 @@ export function useStats(): UseStatsResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [streamState, setStreamState] = useState<StreamState>('connecting')
+  const [lastSignal, setLastSignal] = useState<StatsSignal | null>(null)
 
   // Guardado en un ref para que los listeners de SSE no se re-creen en cada
   // render y no dejen suscripciones huerfanas.
@@ -84,15 +95,20 @@ export function useStats(): UseStatsResult {
     })
 
     source.addEventListener('stats-changed', (event) => {
-      const revision = readRevision(event)
+      const signal = readSignal(event)
 
       // Descarta senales repetidas: una reconexion puede reenviar la
       // ultima y no tiene sentido revalidar dos veces por el mismo cambio.
-      if (revision !== null && revision <= lastRevision.current) return
-      if (revision !== null) lastRevision.current = revision
+      if (signal !== null && signal.revision <= lastRevision.current) return
+      if (signal !== null) lastRevision.current = signal.revision
 
       setStreamState('live')
-      void load()
+
+      // El read model que cambia no siempre es este: una senal de `orders`
+      // no tiene por que disparar un fetch de /api/stats.
+      const model = signal?.model ?? 'stats'
+      setLastSignal(signal ?? { revision: lastRevision.current, model })
+      if (model === 'stats') void load()
     })
 
     source.onerror = () => {
@@ -134,10 +150,14 @@ export function useStats(): UseStatsResult {
     if (streamState === 'connecting') setStreamState('polling')
   }, [streamState])
 
-  return { stats, empty, loading, error, streamState, refresh }
+  return { stats, empty, loading, error, streamState, lastSignal, refresh }
 }
 
 function readRevision(event: Event): number | null {
+  return readSignal(event)?.revision ?? null
+}
+
+export function readSignal(event: Event): StatsSignal | null {
   const data = (event as MessageEvent).data
 
   if (typeof data !== 'string') return null
@@ -151,7 +171,12 @@ function readRevision(event: Event): number | null {
       'revision' in parsed &&
       typeof (parsed as { revision: unknown }).revision === 'number'
     ) {
-      return (parsed as { revision: number }).revision
+      const model = (parsed as { model?: unknown }).model
+
+      return {
+        revision: (parsed as { revision: number }).revision,
+        model: model === 'orders' ? 'orders' : 'stats',
+      }
     }
   } catch {
     // Un payload malformado no debe romper la suscripcion.

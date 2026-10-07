@@ -15,7 +15,7 @@ export function App() {
   const [pending, setPending] = useState(emptyPending)
   const [lastOrder, setLastOrder] = useState<CreatedOrder | null>(null)
 
-  const { stats, empty, loading, error, streamState, refresh } = useStats()
+  const { stats, empty, loading, error, streamState, lastSignal, refresh } = useStats()
   const orders = useOrders()
 
   /**
@@ -47,20 +47,34 @@ export function App() {
   }, [pending, stats?.totalOrders])
 
   /*
-   * El listado se recarga cuando llega una señal SSE del modelo `orders`.
-   *
-   * El hook useStats ya está suscrito al stream y descarta señales por
-   * `revision`, así que recargar con cada señal sería duplicar trabajo. Lo
-   * que hace falta es que la lista vuelva a pedir la primera página cuando
-   * la señal dice `orders`, para que la orden recién guardada aparezca arriba.
+   * El listado se recarga cuando llega una senal SSE del modelo `orders`,
+   * para que la orden recien guardada aparezca arriba sin refrescar a mano.
    */
-  const ordersSignature = `${orders.rows.length}:${orders.total}`
   useEffect(() => {
-    if (pending.count > 0) {
+    if (lastSignal?.model === 'orders') {
       orders.refresh()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ordersSignature])
+  }, [lastSignal])
+
+  /*
+   * Respaldo coherente con useStats: si el stream esta caido no llegan
+   * senales, asi que la lista se revalida por polling igual que las
+   * metricas. Sin esto el badge diria "respaldo por polling" pero la
+   * tabla quedaria congelada.
+   */
+  useEffect(() => {
+    if (streamState !== 'polling' && streamState !== 'offline') return
+
+    const id = setInterval(() => {
+      orders.refresh()
+    }, 5_000)
+
+    return () => {
+      clearInterval(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamState])
 
   return (
     <main className="page">
