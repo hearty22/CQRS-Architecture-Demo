@@ -15,7 +15,7 @@ const SEED_PRICES: readonly number[] = [
   15.5, 7.77, 249.99, 0.01, 88.88, 12.34, 5.6, 150, 67.89, 0.45,
 ]
 
-const DEFAULT_ORDERS = 20
+const DEFAULT_ORDERS = 60
 
 describe('seed', () => {
   it('los 20 precios por defecto suman 2359.75 exacto', () => {
@@ -53,8 +53,9 @@ describe('seed', () => {
     }
   })
 
-  it('el seed cicla los precios y cubre el default completo', () => {
-    assert.equal(SEED_PRICES.length, DEFAULT_ORDERS)
+  it('el default son vueltas exactas por la lista de precios', () => {
+    // 60 órdenes = 3 vueltas de 20: el total esperado sale entero y exacto.
+    assert.equal(DEFAULT_ORDERS % SEED_PRICES.length, 0)
   })
 
   it('el total del seed escala de forma exacta', () => {

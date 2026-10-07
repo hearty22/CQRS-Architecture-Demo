@@ -11,9 +11,9 @@
  * reintroduce artificialmente.
  *
  * Uso:
- *   pnpm seed            # 20 ordenes
+ *   pnpm seed            # 60 ordenes
  *   pnpm seed -- 50      # 50 ordenes
- *   pnpm seed -- 20 --reset   # limpia antes
+ *   pnpm seed -- 60 --reset   # limpia antes
  */
 
 import { CHANNELS } from '../shared/channels.js'
@@ -26,7 +26,7 @@ import { logger } from '../shared/logger.js'
 
 const log = logger.child('seed')
 
-const DEFAULT_ORDERS = 20
+const DEFAULT_ORDERS = 60
 
 /**
  * Precios que EXPOSEN la deriva de punto flotante.

@@ -106,14 +106,14 @@ services:
         pnpm prisma:migrate
         if [ "${SEED_ON_START:-true}" = "true" ]; then
           echo "SEED_ON_START=true: sembrando datos de prueba"
-          pnpm seed -- "$${SEED_ORDERS:-20}"
+          pnpm seed -- "$${SEED_ORDERS:-60}"
         else
           echo "SEED_ON_START=false: se arranca sin datos"
         fi
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       SEED_ON_START: ${SEED_ON_START:-true}
-      SEED_ORDERS: ${SEED_ORDERS:-20}
+      SEED_ORDERS: ${SEED_ORDERS:-60}
 
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'

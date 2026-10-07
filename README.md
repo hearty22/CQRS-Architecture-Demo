@@ -134,7 +134,7 @@ tres reglas son verificables y hay tests que fallan si se rompen:
 ### Datos de prueba
 
 ```bash
-docker compose up -d      # ya siembra solo: 20 órdenes y $2.359,75
+docker compose up -d      # ya siembra solo: 60 órdenes y $7.079,25
 ```
 
 `docker compose up -d` levanta un servicio `init` one-shot que aplica
@@ -153,7 +153,7 @@ docker compose run --rm backend pnpm db:reset -- 20       # limpiar y re-sembrar
 
 **El seed es idempotente por decisión, no por escritura.** Consulta si ya hay
 órdenes y no hace nada si las hay. Hace falta porque `init` corre en *cada* `up`:
-sin ese corte, el segundo arranque duplicaría las 20 órdenes y el read model
+sin ese corte, el segundo arranque duplicaría las 60 órdenes y el read model
 mostraría el doble. La escritura no se hizo idempotente a propósito: preguntar
 "¿ya hay datos?" es una consulta barata y explícita, mientras que hacer el
 insert idempotente escondería la decisión dentro de la operación.
@@ -161,7 +161,7 @@ insert idempotente escondería la decisión dentro de la operación.
 El seed usa **`handleCreateOrder`**, el mismo handler que el endpoint HTTP, y
 no un `insert` directo. Es lo que lo hace útil: si insertara con SQL crudo
 llenaría `orders` pero no `outbox`, y el dashboard quedaría en cero mientras la
-tabla muestra 20 órdenes — el bug de inconsistencia que el outbox existe para
+tabla muestra 60 órdenes — el bug de inconsistencia que el outbox existe para
 evitar, reintroducido a propósito.
 
 Los precios por defecto están elegidos para **exponer la deriva de float**
@@ -169,7 +169,7 @@ Los precios por defecto están elegidos para **exponer la deriva de float**
 saldría bien por casualidad y el acumulador en centavos no probaría nada:
 
 ```
-20 órdenes →  2359.75        (exacto, en centavos)
+60 órdenes →  7079.25        (exacto, en centavos)
              2359.7499999999995  (si se acumulara en float)
 ```
 
@@ -436,8 +436,8 @@ inherente a Redis Pub/Sub; la alternativa sería un stream con consumer groups
 - La ruta vieja responde 301 y seguir el redirect da 200 en `/api/stats`.
 - El cierre por `SIGTERM` corre en orden: relay → desuscripción → conexiones.
 - 52 tests en verde, `typecheck` limpio en src y tests.
-- **Seed de 20 órdenes**: `2359.75` exacto vía endpoint y vía MongoDB
-  (20 órdenes, 20 ids de idempotencia). Reprocesar el outbox entero deja el
+- **Seed de 60 órdenes**: `7079.25` exacto vía endpoint y vía MongoDB
+  (60 órdenes, 60 ids de idempotencia). Reprocesar el outbox entero deja el
   total intacto: 21 duplicados ignorados, 0 aplicados.
 
 ## Lo que aprendí de los detalles

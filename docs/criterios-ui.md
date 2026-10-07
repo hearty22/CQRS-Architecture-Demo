@@ -1,7 +1,7 @@
 # Criterios de aceptación de la UI
 
 Abrí **http://localhost:5173**. Con `docker compose up -d` el estado inicial
-esperado es **20 órdenes** y **$2.359,75** (el seed corre solo).
+esperado es **60 órdenes** y **$7.079,25** (el seed corre solo).
 
 Cada criterio va como **pasa / falla**. Si falla, anotá qué esperabas, qué viste
 y la línea de consola.
@@ -10,7 +10,7 @@ y la línea de consola.
 
 | # | Acción | Esperado |
 |---|---|---|
-| A1 | Abrir la app | 2 métricas: **$2.359,75** y **20** |
+| A1 | Abrir la app | 2 métricas: **$7.079,25** y **60** |
 | A2 | Ver el badge | "en vivo", punto verde, en ~1s |
 | A3 | Debajo de las métricas | "Proyectado hace X · `GET /api/stats`" |
 | A4 | Consola del browser | **Cero errores** |
@@ -22,9 +22,9 @@ y la línea de consola.
 |---|---|---|
 | B1 | Pestaña "Crear orden" → nombre `Test UI`, precio `10.50` | Formulario vacío |
 | B2 | Enviar | Vuelve al Dashboard **sin refresh manual** |
-| B3 | **Inmediatamente** | Total **igual**: $2.359,75 y 20 |
+| B3 | **Inmediatamente** | Total **igual**: $7.079,25 y 60 |
 | B4 | Banner | "1 orden guardada. El total se actualiza cuando la proyección corre." |
-| B5 | **1–3 s después** | $2.370,25 y 21, **solo** |
+| B5 | **1–3 s después** | $7.089,75 y 61, **solo** |
 | B6 | Banner | **Desaparece solo** |
 | B7 | Pie de página | "Última orden: **Test UI** · $10.50 · `a1b2c3d4`" |
 
