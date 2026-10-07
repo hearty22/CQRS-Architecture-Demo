@@ -21,6 +21,13 @@ export interface StatsSignal {
   model: ReadModelName
 }
 
+/** Señal ya recibida, con sello de tiempo local: alimenta el event feed. */
+export interface SignalRecord extends StatsSignal {
+  receivedAt: number
+}
+
+const MAX_EVENTS = 30
+
 export interface UseStatsResult {
   stats: DashboardStats | null
   empty: boolean
@@ -30,6 +37,8 @@ export interface UseStatsResult {
   /** Última señal del stream. Sirve para que otros hooks reaccionen al read
    *  model que cambió (p.ej. recargar la lista de órdenes). */
   lastSignal: StatsSignal | null
+  /** Últimas señales recibidas (más nuevas primero), para el event feed. */
+  events: SignalRecord[]
   refresh: () => void
 }
 
@@ -46,6 +55,7 @@ export function useStats(): UseStatsResult {
   const [error, setError] = useState<string | null>(null)
   const [streamState, setStreamState] = useState<StreamState>('connecting')
   const [lastSignal, setLastSignal] = useState<StatsSignal | null>(null)
+  const [events, setEvents] = useState<SignalRecord[]>([])
 
   // Guardado en un ref para que los listeners de SSE no se re-creen en cada
   // render y no dejen suscripciones huerfanas.
@@ -107,7 +117,9 @@ export function useStats(): UseStatsResult {
       // El read model que cambia no siempre es este: una senal de `orders`
       // no tiene por que disparar un fetch de /api/stats.
       const model = signal?.model ?? 'stats'
-      setLastSignal(signal ?? { revision: lastRevision.current, model })
+      const effective = signal ?? { revision: lastRevision.current, model }
+      setLastSignal(effective)
+      setEvents((current) => [{ ...effective, receivedAt: Date.now() }, ...current].slice(0, MAX_EVENTS))
       if (model === 'stats') void load()
     })
 
@@ -150,7 +162,7 @@ export function useStats(): UseStatsResult {
     if (streamState === 'connecting') setStreamState('polling')
   }, [streamState])
 
-  return { stats, empty, loading, error, streamState, lastSignal, refresh }
+  return { stats, empty, loading, error, streamState, lastSignal, events, refresh }
 }
 
 function readRevision(event: Event): number | null {

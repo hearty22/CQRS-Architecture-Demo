@@ -2,6 +2,7 @@ import cors from 'cors'
 import express from 'express'
 
 import { commandsRouter } from './commands/index.js'
+import { demoRouter } from './demo/demo.routes.js'
 import { errorHandler, jsonSyntaxErrorHandler, notFoundHandler } from './shared/errors.js'
 import { queriesRouter } from './queries/index.js'
 
@@ -30,6 +31,12 @@ export function createApp() {
   // Command side: escribe. Query side: lee de MongoDB.
   app.use('/api', commandsRouter)
   app.use('/api', queriesRouter)
+
+  // Demo en vivo: pausar/reanudar la proyección desde la UI. Sin el flag
+  // estas rutas ni se registran — nunca expuestas en producción.
+  if (process.env.DEMO_MODE === 'true') {
+    app.use('/api/_demo', demoRouter)
+  }
 
   // Al final: si el 404 se registra antes de las rutas nunca se dispara.
   app.use(notFoundHandler)

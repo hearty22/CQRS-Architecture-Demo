@@ -96,6 +96,23 @@ export async function createOrder(
   return extractOrder(body)
 }
 
+export async function pauseProjection(): Promise<void> {
+  await postDemo('/api/_demo/pause')
+}
+
+export async function resumeProjection(): Promise<void> {
+  await postDemo('/api/_demo/resume')
+}
+
+async function postDemo(url: string): Promise<void> {
+  const response = await fetch(url, { method: 'POST' })
+
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    throw new ApiError(describeApiError(body), response.status, readCode(body))
+  }
+}
+
 function readCode(body: unknown): string {
   if (typeof body === 'object' && body !== null && 'error' in body) {
     const { error } = body as { error: ApiErrorBody }

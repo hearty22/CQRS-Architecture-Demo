@@ -164,6 +164,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       PORT: '3000'
       RUN_WORKER: 'true'
+      DEMO_MODE: ${DEMO_MODE:-true}
 
       # Dentro de compose los hosts son los nombres de servicio.
       POSTGRES_HOST: postgres

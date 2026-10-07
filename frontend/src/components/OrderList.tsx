@@ -4,6 +4,8 @@ import type { UseOrdersResult } from '../hooks/useOrders'
 export interface OrderListProps extends UseOrdersResult {
   /** true si hay una orden guardada que el read model todavía no reflejó. */
   pending: number
+  /** Id de la orden recién creada: su fila se ilumina al aparecer. */
+  highlightId?: string | null
 }
 
 /**
@@ -26,6 +28,7 @@ export function OrderList({
   loadMore,
   refresh,
   pending,
+  highlightId,
 }: OrderListProps) {
   return (
     <section className="card">
@@ -53,6 +56,9 @@ export function OrderList({
 
       {loading && rows.length === 0 && <p className="muted">Cargando órdenes…</p>}
 
+      {/* Highlight solo si la fila ya existe: la animación corre cuando la
+          proyección la inserta, no al guardar del lado del cliente. */}
+
       {!loading && rows.length === 0 && error === null && (
         <p className="muted">
           Todavía no hay órdenes proyectadas. Creá una y aparece sola.
@@ -76,7 +82,7 @@ export function OrderList({
             </thead>
             <tbody>
               {rows.map((order) => (
-                <tr key={order.id}>
+                <tr key={order.id} className={order.id === highlightId ? 'row--fresh' : undefined}>
                   <td>{order.productName}</td>
                   <td className="table__num">{formatCents(order.priceCents)}</td>
                   <td className="table__num">{formatTimestamp(order.createdAt)}</td>

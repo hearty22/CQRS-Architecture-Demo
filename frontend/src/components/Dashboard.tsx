@@ -1,7 +1,7 @@
 import type { DashboardStats } from '../api/contract'
 import { formatAge, formatRevenue } from '../api/contract'
 import { StreamBadge } from './StreamBadge'
-import type { StreamState } from '../hooks/useStats'
+import type { StatsSignal, StreamState } from '../hooks/useStats'
 
 export interface DashboardProps {
   stats: DashboardStats | null
@@ -9,6 +9,8 @@ export interface DashboardProps {
   loading: boolean
   error: string | null
   streamState: StreamState
+  /** Última señal SSE: dispara el pulso del badge. */
+  signal: StatsSignal | null
   /** Órdenes guardadas que el read model todavía no reflejó. */
   pending: number
   onRefresh: () => void
@@ -20,17 +22,29 @@ export function Dashboard({
   loading,
   error,
   streamState,
+  signal,
   pending,
   onRefresh,
 }: DashboardProps) {
   if (loading && stats === null) {
-    return <p className="muted">Cargando read model…</p>
+    return (
+      <div className="metrics" aria-label="Cargando read model…">
+        <article className="metric">
+          <span className="metric__label">Facturación total</span>
+          <span className="skeleton skeleton--value" />
+        </article>
+        <article className="metric">
+          <span className="metric__label">Órdenes</span>
+          <span className="skeleton skeleton--value" />
+        </article>
+      </div>
+    )
   }
 
   return (
     <section className="stack">
       <div className="toolbar">
-        <StreamBadge state={streamState} />
+        <StreamBadge state={streamState} signal={signal} />
         <button type="button" onClick={onRefresh} className="button button--ghost">
           Refrescar
         </button>
