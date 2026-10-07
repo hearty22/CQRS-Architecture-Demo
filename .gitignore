@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Variables de entorno (solo se versiona .env.example)
+.env
+.env.local
+.env.*.local
+
+# Prisma: el cliente generado no se versiona
+backend/src/generated/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+logs/
+
+# Tests
+coverage/
+
+# Editors / SO
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

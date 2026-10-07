@@ -1,0 +1,12 @@
+# Misma razon que en backend: pnpm 11 lee su configuracion de aca y
+# `onlyBuiltDependencies` ya no existe (fue reemplazada por `allowBuilds`).
+# Vite arrastra esbuild, cuyo postinstall se bloquea sin esto.
+allowBuilds:
+  'esbuild': true
+
+# pnpm 11 aplica por defecto una politica de `minimumReleaseAge` que frena
+# versiones publicadas hace poco (proteccion contra typosquats). La 8.3.3 de
+# Vite es demasiado reciente, asi que pnpm la excluyo automaticamente al
+# instalar. Si se sube vite, esta lista se actualiza sola.
+minimumReleaseAgeExclude:
+  - vite@8.3.3

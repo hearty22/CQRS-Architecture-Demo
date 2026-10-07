@@ -1,0 +1,42 @@
+{
+  "name": "cqrs-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "seed": "tsx src/seed/seed.ts",
+    "db:reset": "tsx src/seed/reset.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "cors": "2.8.6",
+    "express": "5.2.1",
+    "ioredis": "6.0.0",
+    "mongoose": "9.11.0",
+    "pg": "^8.23.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.4",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.5",
+    "prisma": "7.10.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

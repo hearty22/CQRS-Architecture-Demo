@@ -1,0 +1,12 @@
+# pnpm 11 lee su configuración desde este archivo (ya no desde el campo
+# "pnpm" de package.json).
+#
+# `onlyBuiltDependencies` fue ELIMINADA en pnpm 11 y reemplazada por
+# `allowBuilds`, que es un mapa de paquete -> booleano.
+#
+# Sin esto, pnpm ignora los build scripts de Prisma y esbuild y el install
+# falla con ERR_PNPM_IGNORED_BUILDS (strictDepBuilds viene en true por default).
+allowBuilds:
+  '@prisma/engines': true
+  'prisma': true
+  'esbuild': true

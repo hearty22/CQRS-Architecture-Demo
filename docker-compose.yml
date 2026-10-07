@@ -1,0 +1,159 @@
+# ==========================================================
+# CQRS - Monolito Modular
+#
+# Solo desarrollo: hot reload, codigo montado, nada de build de
+# produccion. Los Dockerfile no son desplegables.
+# ==========================================================
+
+name: cqrs
+
+services:
+  # ---------------- LADO DE ESCRITURA ----------------
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cqrs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cqrs_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cqrs}
+    ports:
+      - '${POSTGRES_PUBLISHED_PORT:-5432}:5432'
+    volumes:
+      # Postgres 18 exige montar en /var/lib/postgresql (no .../data):
+      # con el path viejo no puede hacer pg_upgrade --link sin cruzar el
+      # mount point. El entrypoint crea solo el subdirectorio.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      # $$ escapa a $ para que lo resuelva el shell DENTRO del contenedor,
+      # leyendo la variable del propio servicio.
+      test:
+        ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [cqrs_net]
+
+  # ---------------- LADO DE LECTURA ----------------
+  mongodb:
+    # 8.3 y no 9: la tabla oficial de compatibilidad de Mongoose 9 cubre
+    # el server 8.x/7.x/6.x y todavia no lista 9.x.
+    image: mongo:8.3
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-cqrs}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-cqrs_password}
+    ports:
+      - '${MONGO_PUBLISHED_PORT:-27017}:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok" --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin | grep -q 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [cqrs_net]
+
+  # ---------------- EVENT BUS ----------------
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    environment:
+      # Necesario para que el healthcheck pueda leerla.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-cqrs_redis_password}
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-cqrs_redis_password}
+    ports:
+      - '${REDIS_PUBLISHED_PORT:-6379}:6379'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [cqrs_net]
+
+  # ---------------- API ----------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      - ./backend:/app
+      # CRITICO: volumen nombrado en node_modules. Sin esto, el bind mount
+      # del host pisa el node_modules del contenedor y los symlinks de pnpm
+      # se rompen (el store vive fuera de /app).
+      - backend_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: '3000'
+      RUN_WORKER: 'true'
+
+      # Dentro de compose los hosts son los nombres de servicio.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: ${POSTGRES_USER:-cqrs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cqrs_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cqrs}
+
+      MONGO_HOST: mongodb
+      MONGO_PORT: '27017'
+      MONGO_USER: ${MONGO_USER:-cqrs}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-cqrs_password}
+      MONGO_DB: ${MONGO_DB:-cqrs}
+
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-cqrs_redis_password}
+      REDIS_DB: '0'
+
+      # Solo la necesita el Prisma CLI (generate/migrate). La app deriva la
+      # URL en src/config/env.ts a partir de POSTGRES_*.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cqrs}:${POSTGRES_PASSWORD:-cqrs_password}@postgres:5432/${POSTGRES_DB:-cqrs}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [cqrs_net]
+
+  # ---------------- FRONTEND ----------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      VITE_API_URL: /api
+    depends_on:
+      - backend
+    networks: [cqrs_net]
+
+volumes:
+  postgres_data:
+  mongo_data:
+  backend_node_modules:
+  frontend_node_modules:
+
+networks:
+  cqrs_net:
+    driver: bridge
