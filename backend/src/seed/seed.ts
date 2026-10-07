@@ -17,8 +17,9 @@
  */
 
 import { CHANNELS } from '../shared/channels.js'
-import { disconnectMongo } from '../config/mongodb.js'
+import { connectMongo, disconnectMongo } from '../config/mongodb.js'
 import { disconnectPostgres, prisma } from '../config/postgres.js'
+import { DASHBOARD_STATS_ID, DashboardStats } from '../queries/dashboard-stats.model.js'
 import { env } from '../config/env.js'
 import { handleCreateOrder } from '../commands/orders/create-order.handler.js'
 import { logger } from '../shared/logger.js'
@@ -82,6 +83,21 @@ async function reset(): Promise<void> {
   await prisma.outbox.deleteMany({})
   await prisma.order.deleteMany({})
   log.info('tablas orders y outbox vaciadas')
+
+  // El read model se BORRA, no se pone en cero.
+  //
+  // Si solo se resetean los contadores, los processedEventIds viejos
+  // quedan y la deduplicacion los trata como "ya vistos": el relay
+  // republica las ordenes nuevas con ids distintos, asi que se sumarian
+  // bien, pero el documento arrastra un historico que no corresponde.
+  // Peor: si se resetea a 0 y quedan ids viejos, un replay de eventos
+  // viejos se descartaria como duplicado y el total quedaria mal.
+  const deleted = await DashboardStats.deleteOne({ _id: DASHBOARD_STATS_ID })
+  log.info(`read model dashboard_stats borrado (${deleted.deletedCount})`)
+
+  if (deleted.deletedCount === 0) {
+    log.debug('no habia read model que borrar')
+  }
 }
 
 async function main(): Promise<void> {
@@ -91,7 +107,30 @@ async function main(): Promise<void> {
   log.info(`sembrando ${count} ordenes${resetFirst ? ' (con reset)' : ''} en ${env.NODE_ENV}`)
 
   if (resetFirst) {
+    // Este script corre por `docker compose run`, un contenedor NUEVO que
+    // no paso por el bootstrap de src/index.ts. Sin conectar aca, mongoose
+    // queda en modo buffer y el deleteOne expira con "buffering timed out".
+    await connectMongo()
     await reset()
+  }
+
+  /*
+   * Idempotencia por DECISIÓN, no por escritura.
+   *
+   * Con el servicio `init` de docker-compose, este seed corre en CADA
+   * `docker compose up`. Sin este corte, el segundo arranque duplicaría
+   * las 20 órdenes y el read model mostraría el doble.
+   *
+   * Se decide acá y no se hace idempotente la escritura: preguntar "¿ya
+   * hay datos?" es una consulta barata y explícita, mientras que hacer el
+   * insert idempotente escondería la decisión dentro de la operación.
+   */
+  const existing = await prisma.order.count()
+
+  if (existing > 0) {
+    log.info(`ya hay ${existing} ordenes: no se siembra nada (idempotente)`)
+    log.info('para forzar de cero: pnpm seed -- <n> --reset')
+    return
   }
 
   const created: { id: string; price: number }[] = []
@@ -109,7 +148,9 @@ async function main(): Promise<void> {
   const expectedCents = created.reduce((total, order) => total + Math.round(order.price * 100), 0)
 
   log.info(`${created.length} ordenes creadas, esperado ${(expectedCents / 100).toFixed(2)}`)
-  log.info(`los eventos salen por el canal ${CHANNELS.ordersEvents} cuando arranque el worker`)
+  log.info(
+    `los eventos salen por el canal ${CHANNELS.ordersEvents} cuando arranque el worker`,
+  )
 }
 
 main()

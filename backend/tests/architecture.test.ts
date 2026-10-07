@@ -173,7 +173,7 @@ test('el read path no hace aritmetica sobre los datos', () => {
   // Operadores aritmeticos aplicados a campos del documento (totalRevenue,
   // totalRevenueCents, totalOrders). Se excluyen literales de rutas como
   // '/api/stats' y '/100' en un comentario.
-  const ARITHMETIC = /(?<field>totalRevenue\w*|totalOrders)\s*[-+*/]\s*|\s[-+*/]\s*(?<field2>totalRevenue\w*|totalOrders)/
+  const ARITHMETIC = /(?<field>totalRevenue\w*|totalOrders|priceCents)\s*[-+*/]\s*|\s[-+*/]\s*(?<field2>totalRevenue\w*|totalOrders|priceCents)/
   const DIVIDE_FIELD = /[-+*/]\s*100\b/
 
   const violations: string[] = []

@@ -2,7 +2,9 @@ import { CHANNELS } from '../shared/channels.js'
 import { logger } from '../shared/logger.js'
 import { parseEnvelope } from '../shared/channels.js'
 import { redisSubscriber } from '../config/redis.js'
+import { statsNotifier } from '../queries/stats.notifier.js'
 import { applyOrderCreated } from './order-stats.projection.js'
+import { projectOrder } from './order.projection.js'
 
 const log = logger.child('orders-projection')
 
@@ -56,6 +58,18 @@ export async function handleChannelMessage(channel: string, raw: string): Promis
     if (result.applied) {
       stats.applied += 1
       log.info(`aplicado ${envelope.eventId} (orden ${envelope.aggregateId})`)
+
+      // Notifica DESPUES de aplicar, nunca antes. El read model ya esta
+      // consistente con este evento, asi que el cliente que revalida al
+      // recibir la senal ve el total correcto.
+      //
+      // Notificar solo en `applied` y no tambien en el duplicado evita que
+      // un reintento del outbox genere una senal falsa.
+      //
+      // Se notifican los DOS read models: la orden recien proyectada cambia
+      // el listado tanto como el contador. El modelo viaja en la señal para
+      // que el cliente revalide solo lo que le importa.
+      statsNotifier.notify(`order:${envelope.eventId}`, 'stats', new Date())
     } else if (result.reason === 'already-processed') {
       stats.duplicate += 1
       log.debug(`duplicado ignorado: ${envelope.eventId}`)
@@ -63,6 +77,31 @@ export async function handleChannelMessage(channel: string, raw: string): Promis
       stats.invalid += 1
       log.warn(`payload invalido en ${envelope.eventId}, descartado`)
     }
+
+    /*
+     * El read model de órdenes se proyecta SIEMPRE, incluso cuando la
+     * estadística fue duplicado.
+     *
+     * No son la misma operación: `dashboard_stats` es un singleton con un
+     * contador compartido, así que un reintento no debe volver a sumar. El
+     * documento de la orden, en cambio, es idempotente por `_id`, así que
+     * reproyectarlo es gratis y garantiza que las dos vistas queden
+     * alineadas.
+     *
+     * En la practica solo difieren si un evento se aplicó a las statistics
+     * y se perdió antes de llegar acá, que es exactamente el caso que esta
+     * separación tolera y una sola operación no.
+     */
+    await projectOrder(
+      envelope.aggregateId,
+      envelope.payload as never,
+      new Date(envelope.occurredAt),
+    )
+
+    // El listado cambió. Se notifica acá y no antes de proyectar, por la
+    // misma razón que las estadísticas: el cliente tiene que encontrar la
+    // orden en la lista cuando reciba la señal.
+    statsNotifier.notify(`order:${envelope.eventId}`, 'orders', new Date())
   } catch (error) {
     // Si MongoDB esta caido, el mensaje ya se perdio: Pub/Sub no tiene
     // reintento ni cola. Se loguea y se sigue; el outbox sigue siendo la

@@ -10,3 +10,8 @@ allowBuilds:
   '@prisma/engines': true
   'prisma': true
   'esbuild': true
+
+# Mismo motivo que en frontend: el volumen nombrado de /app/node_modules
+# queda desfasado cuando cambia el lockfile, y pnpm aborta el purge sin TTY
+# dejando el contenedor en loop de reinicio.
+confirmModulesPurge: false

@@ -10,3 +10,13 @@ allowBuilds:
 # instalar. Si se sube vite, esta lista se actualiza sola.
 minimumReleaseAgeExclude:
   - vite@8.3.3
+
+# El volumen nombrado de /app/node_modules se sembró con el node_modules de
+# un lockfile anterior. Cuando el lockfile cambia, pnpm quiere PURGAR ese
+# directorio para reinstalarlo limpio, y sin TTY aborta con
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: el contenedor entra en loop de
+# reinicio y no levanta nunca.
+#
+# confirmModulesPurge:false deja que purgue solo. Es seguro acá porque el
+# directorio es un volumen desechable de desarrollo, no código fuente.
+confirmModulesPurge: false

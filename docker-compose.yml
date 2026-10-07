@@ -81,6 +81,70 @@ services:
       retries: 12
     networks: [cqrs_net]
 
+  # ---------------- MIGRACIONES + SEED ----------------
+  # Servicio one-shot: aplica migraciones y siembra, y termina.
+  #
+  # Por que un servicio aparte y no un flag en el CMD del backend: asi el
+  # orden queda garantizado (migrar -> sembrar -> levantar la API). Con un
+  # flag condicional, un arranque mal sincronizado siembra contra un schema
+  # viejo y falla de una forma que no dice nada sobre la causa.
+  #
+  # El backend espera con `service_completed_successfully`: si el seed
+  # falla, la API no levanta.
+  #
+  # Para arrancar SIN datos: SEED_ON_START=false pnpm up
+  init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: 'no'
+    command:
+      - sh
+      - -c
+      - |
+        pnpm prisma generate
+        pnpm prisma:migrate
+        if [ "${SEED_ON_START:-true}" = "true" ]; then
+          echo "SEED_ON_START=true: sembrando datos de prueba"
+          pnpm seed -- "$${SEED_ORDERS:-20}"
+        else
+          echo "SEED_ON_START=false: se arranca sin datos"
+        fi
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      SEED_ON_START: ${SEED_ON_START:-true}
+      SEED_ORDERS: ${SEED_ORDERS:-20}
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: ${POSTGRES_USER:-cqrs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cqrs_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cqrs}
+
+      MONGO_HOST: mongodb
+      MONGO_PORT: '27017'
+      MONGO_USER: ${MONGO_USER:-cqrs}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-cqrs_password}
+      MONGO_DB: ${MONGO_DB:-cqrs}
+
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-cqrs_redis_password}
+      REDIS_DB: '0'
+
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cqrs}:${POSTGRES_PASSWORD:-cqrs_password}@postgres:5432/${POSTGRES_DB:-cqrs}?schema=public
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [cqrs_net]
+
   # ---------------- API ----------------
   backend:
     build:
@@ -129,6 +193,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Las migraciones y el seed tienen que haber terminado antes de que
+      # la API levante. Si no, el backend corre `prisma migrate deploy` en
+      # su CMD al mismo tiempo que el servicio init y compiten por el lock
+      # de migraciones.
+      init:
+        condition: service_completed_successfully
     networks: [cqrs_net]
 
   # ---------------- FRONTEND ----------------
