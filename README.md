@@ -12,6 +12,7 @@ escritura, MongoDB para lectura, Redis como event bus.
 | 3 | Proyección a MongoDB (`DashboardStats`) — completa |
 | 4 | Read model y `GET /api/stats` — completa |
 | 5 | SSE + frontend React (dashboard y alta de órdenes) — completa |
+| 6 | Read model de órdenes (`GET /api/orders`) en MongoDB — completa |
 
 ## Arquitectura
 
@@ -106,6 +107,27 @@ curl http://localhost:3000/api/stats
 # {"data":{"totalRevenue":3732.85,"totalOrders":23,"updatedAt":"2026-10-07T03:03:06.285Z"}}
 ```
 
+#`GET /api/orders`
+
+Read model paginado por cursor, directo de MongoDB:
+
+```bash
+curl "http://localhost:3000/api/orders?limit=20"
+```
+
+```json
+{
+  "data": [
+    { "id": "…", "productName": "Teclado", "priceCents": 1999, "createdAt": "…" }
+  ],
+  "meta": { "total": 60, "nextCursor": "…" }
+}
+```
+
+`priceCents` es entero a propósito: la conversión a decimales pasa en el
+cliente (la capa HTTP no hace aritmética sobre el read model). Una fila con
+forma rota se descarta sin tirar la página.
+
 `GET /api/dashboard/stats` responde **301** hacia `/api/stats` (ruta de la
 fase 3, conservada para no romper consumidores).
 
@@ -173,6 +195,19 @@ saldría bien por casualidad y el acumulador en centavos no probaría nada:
              2359.7499999999995  (si se acumulara en float)
 ```
 
+### Demo en vivo: pausar la proyección
+
+Con `DEMO_MODE=true` (default en `docker-compose.yml`) se habilitan:
+
+```bash
+curl -X POST http://localhost:3000/api/_demo/pause    # stopWorker: relay + subscriber
+curl -X POST http://localhost:3000/api/_demo/resume   # startWorker: catch-up de golpe
+curl http://localhost:3000/api/_demo/status
+```
+
+El botón "Pausar proyección" del frontend llama a estos mismos endpoints.
+Sin `DEMO_MODE=true` las rutas no se registran en absoluto.
+
 ### Cómo se actualiza el dashboard
 
 `GET /api/stats/events` es un stream **Server-Sent Events**. La proyección
@@ -182,7 +217,9 @@ notifica cuando cambia el read model y el cliente revalida contra
 **El stream no lleva el importe, solo la señal.** El total que emitió una
 proyección puede quedar obsoleto si otra orden entra un milisegundo después, así
 que mandarlo por el stream congelaría un valor viejo en pantalla. El payload es
-`{ revision, updatedAt, reason }` y el cliente siempre revalida.
+`{ revision, updatedAt, reason, model }` y el cliente siempre revalida. `model`
+(`'stats'` | `'orders'`) dice qué read model cambió, para que el cliente
+recargue solo lo que le importa.
 
 **La señal sale de la proyección, no del POST.** El `201` llega antes de que el
 evento exista en Redis; notificar desde el handler haría que el dashboard se
@@ -198,6 +235,7 @@ cd frontend && pnpm test:sse   # verificación del stream contra el backend real
 ```
 
 Criterios de aceptación de la UI para probar a mano: ver `docs/criterios-ui.md`.
+Guion de demo: ver `docs/DEMO.md`.
 
 ### Comandos
 
@@ -247,12 +285,15 @@ backend/src/
 │   ├── stats.notifier.ts     emitter local: "el read model cambió"
 │   ├── stats.read-model.ts   findById → copia de campos, sin cálculo
 │   ├── dashboard-stats.model.ts   read model: _id fijo 'global'
-│   └── orders/dashboard-stats.routes.ts   301 → /api/stats
+│   └── orders/          orders-list.routes.ts, order.read-model.ts,
+│                        order.model.ts, dashboard-stats.routes.ts (301)
+├── demo/           rutas /api/_demo/* (solo con DEMO_MODE=true)
 ├── worker/
 │   ├── index.ts              ciclo de vida; suscribe ANTES de publicar
 │   ├── outbox-relay.ts       relay Postgres → Redis
 │   ├── orders-events.subscriber.ts  consume orders_events + notifica SSE
-│   └── order-stats.projection.ts    update pipeline idempotente
+│   ├── order-stats.projection.ts    update pipeline idempotente (stats)
+│   └── order.projection.ts          upsert de órdenes en Mongo
 ├── config/         env (zod), postgres, mongodb, redis
 └── shared/         logger, errores HTTP, canales, contratos
 
@@ -263,6 +304,7 @@ backend/tests/
 ├── create-order.command.test.ts
 ├── stats.read-model.test.ts  contrato del read model
 ├── stats-events.test.ts      payload SSE y formato del frame
+├── order-list.test.ts        contrato paginado del listado
 ├── seed.test.ts              aritmética del seed
 └── http.test.ts              capa HTTP sin base
 
@@ -270,11 +312,15 @@ frontend/src/
 ├── api/
 │   ├── contract.ts   tipos + parseo + validación (funciones puras, testeables)
 │   └── client.ts     fetch contra /api (rutas relativas: sin CORS)
-├── hooks/useStats.ts EventSource + polling de respaldo
-└── components/       Dashboard, CreateOrderForm, StreamBadge
+├── hooks/    useStats.ts (SSE + polling + feed) · useOrders.ts (cursor)
+├── state/    pending.ts  contador de órdenes guardadas no proyectadas
+└── components/       Dashboard, CreateOrderForm, StreamBadge, OrderList, EventFeed
 
 frontend/tests/
-├── contract.test.ts  27 tests del contrato (sin navegador)
+├── contract.test.ts  tests del contrato (sin navegador)
+├── order-list.test.ts
+├── pending.test.ts
+├── stream-signal.test.ts
 └── sse-live.ts       verificación del stream contra el backend real
 ```
 
@@ -435,7 +481,8 @@ inherente a Redis Pub/Sub; la alternativa sería un stream con consumer groups
   `3731.7` exacto, donde acumular en float daría `3731.7000000000007`.
 - La ruta vieja responde 301 y seguir el redirect da 200 en `/api/stats`.
 - El cierre por `SIGTERM` corre en orden: relay → desuscripción → conexiones.
-- 52 tests en verde, `typecheck` limpio en src y tests.
+- 52 tests de backend en verde (75+ con los de arquitectura), `typecheck` limpio en src y tests
+- Frontend: 53 tests en verde (`pnpm test`), `tsc --noEmit` limpio
 - **Seed de 60 órdenes**: `7079.25` exacto vía endpoint y vía MongoDB
   (60 órdenes, 60 ids de idempotencia). Reprocesar el outbox entero deja el
   total intacto: 21 duplicados ignorados, 0 aplicados.
@@ -482,7 +529,6 @@ inherente a Redis Pub/Sub; la alternativa sería un stream con consumer groups
 ## Pendiente para fases siguientes
 
 - Rotación de `processedEventIds` por ventana temporal
-- Read model de `orders` en MongoDB y `GET /api/orders` desde el read side
 - Comando de rebuild que trunque MongoDB y reprocese el outbox
 - Endpoint `/health`
 - Tests de componentes (requiere testing-library)
